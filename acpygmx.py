@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import sys
 
@@ -17,6 +17,7 @@ if(len(sys.argv)>5):
 
 pdb_name = ''
 topol_name = 'topol.top'
+residuals = {}
 
 
 for i in range(len(sys.argv)):
@@ -34,7 +35,20 @@ print("PDB file name: " + pdb_name)
 print("Topology file name: " + topol_name)
 
 try:
-	pdb_file = open(pdb_name, "r")
+	pdb_file = open(pdb_name, "r").read().split("\n")
 except:
 	print("\nERROR: No such file in directory\n")
 	helpprint()
+
+i = 0
+for line in pdb_file:
+	line = line.split()
+	if(len(line)>=8  and (line[0] == 'ATOM' or line[0] == 'HETATM')):
+		if((line[3] in residuals) == False):
+			residuals[line[3]] = [i]
+		else:
+			residuals[line[3]].append(i)
+	i+=1
+
+for k in residuals:
+	print(k, residuals[k], '\n')
