@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import sys
+import avogadro
 
 def helpprint():
 	print("ACPYGMX v. 0.0\n")
@@ -43,14 +44,26 @@ def createGMXdatabase(path):
 			residatabase.append(line[0])
 	return residatabase
 
+def writenonstdpdb(resi, pdb_org):
+	for i in resi:
+		try:
+			resi_pdb = open(i + '.pdb', "w+")
+		except:
+			print("\nERROR: Cannot create a file\n")
+			helpprint()
+		resi_pdb.write("HEADER " + i + '\n')
+		for j in range(2, len(resi[i]), 1):
+			resi_pdb.write(pdb_org[resi[i][j]] + '\n')
+		resi_pdb.write("END")
+		resi_pdb.close()
+
 if(len(sys.argv)>5):
 	print("\nERROR: To much input values\n")
 	helpprint()
 
 pdb_name = ''
 topol_name = 'topol.top'
-residuals = {}
-nonstdresi = []
+nonstdresi = {}
 
 
 for i in range(len(sys.argv)):
@@ -80,22 +93,24 @@ i = 0
 for line in pdb_file:
 	line = line.split()
 	if(len(line)>=8  and (line[0] == 'ATOM' or line[0] == 'HETATM')):
-		if(((line[3] in GMXdatabase) == False) and ((line[3] in residuals) == False)):
+		if(((line[3] in GMXdatabase) == False) and ((line[3] in nonstdresi) == False)):
 			if(line[4].isupper() == True):
-				residuals[line[3]] = [(line[4])]
-				residuals[line[3]].append(int(line[5]))
+				nonstdresi[line[3]] = [(line[4])]
+				nonstdresi[line[3]].append(int(line[5]))
 			else:
-				residuals[line[3]] = [0]
-				residuals[line[3]] = [int(line[4])]
-			residuals[line[3]].append(i)
-		elif((line[3] in residuals) == True) :
+				nonstdresi[line[3]] = [0]
+				nonstdresi[line[3]].append(int(line[4]))
+			nonstdresi[line[3]].append(i)
+		elif((line[3] in nonstdresi) == True) :
 				if(line[4].isupper() == True):
-					if(residuals[line[3]][0] == line[4] and residuals[line[3]][1] == int(line[5])):
-						residuals[line[3]].append(i)
+					if(nonstdresi[line[3]][0] == line[4] and nonstdresi[line[3]][1] == int(line[5])):
+						nonstdresi[line[3]].append(i)
 				else:
-					if(residuals[line[3]][0] == 0 and residuals[line[3]][1] == int(line[4])):
-						residuals[line[3]].append(i)
+					if(nonstdresi[line[3]][0] == 0 and nonstdresi[line[3]][1] == int(line[4])):
+						nonstdresi[line[3]].append(i)
 	i+=1
 
-for k in residuals:
-	print(k, residuals[k], '\n')
+for k in nonstdresi:
+	print(k, nonstdresi[k], '\n')
+
+writenonstdpdb(nonstdresi, pdb_file)
