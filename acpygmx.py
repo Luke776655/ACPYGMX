@@ -47,8 +47,9 @@ def createGMXdatabase(path):
 
 def writenonstdpdb(resi, pdb_org):
 	for i in resi:
+		subprocess.run(["mkdir", i])
 		try:
-			resi_pdb = open(i + '.pdb', "w+")
+			resi_pdb = open('./'+i+'/'+i+'.pdb', "w+")
 		except:
 			print("\nERROR: Cannot create a file\n")
 			helpprint()
@@ -57,8 +58,11 @@ def writenonstdpdb(resi, pdb_org):
 			resi_pdb.write(pdb_org[resi[i][j]] + '\n')
 		resi_pdb.write("END")
 		resi_pdb.close()
-		subprocess.run(["babel", "-ipdb", i+".pdb", "-opdb", i+"_h.pdb", "-h"])
-		subprocess.run(["acpype", "-i", i+"_h.pdb"])
+
+def createnonstdpdbtopology(resi):
+	for i in resi:
+		subprocess.run(["babel", "-ipdb", i+".pdb", "-opdb", i+"_h.pdb", "-h"], cwd='./'+i)
+		subprocess.run(["acpype", "-i", i+"_h.pdb"], cwd='./'+i)
 
 if(len(sys.argv)>5):
 	print("\nERROR: To much input values\n")
@@ -117,3 +121,4 @@ for k in nonstdresi:
 	print(k, nonstdresi[k], '\n')
 
 writenonstdpdb(nonstdresi, pdb_file)
+createnonstdpdbtopology(nonstdresi)
