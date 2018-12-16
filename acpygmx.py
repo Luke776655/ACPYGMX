@@ -1,7 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/python3.5
 
 import sys
-import avogadro
+import subprocess
+print(sys.version)
 
 def helpprint():
 	print("ACPYGMX v. 0.0\n")
@@ -56,6 +57,8 @@ def writenonstdpdb(resi, pdb_org):
 			resi_pdb.write(pdb_org[resi[i][j]] + '\n')
 		resi_pdb.write("END")
 		resi_pdb.close()
+		subprocess.run(["babel", "-ipdb", i+".pdb", "-opdb", i+"_h.pdb", "-h"])
+		subprocess.run(["acpype", "-i", i+"_h.pdb"])
 
 if(len(sys.argv)>5):
 	print("\nERROR: To much input values\n")
