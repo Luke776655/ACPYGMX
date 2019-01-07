@@ -64,6 +64,7 @@ class PdbLine:
 	chain = ''
 	resi_id = 0
 	charge = 0
+	connected_atoms = []
 	#funkcja przypisująca wartości zmiennym
 	def get_it(self, line):
 		if(len(line)>=70):
@@ -80,6 +81,11 @@ class PdbLine:
 					self.charge = int(line[78])
 				elif(line[79] == '-'):
 					self.charge = -1*int(line[78])
+		if(self.record_name == 'CONECT'):
+			line = line[6:80].split()
+			self.connected_atoms = []
+			for i in line:
+				self.connected_atoms.append(int(i))
 			
 
 #klasa ze strukturą lokalizacji wybranej reszty chemicznej
@@ -89,10 +95,18 @@ class ResiLocation:
 	chain = ''
 	resi_id = 0
 	record_lines = []
+	is_bounded = False
 
 #funkcja wyszukująca niestandardowe reszty chemiczne w pliku PDB, zwraca je i ich pozycje jako słownik
 def get_nonstandard_resis(pdb, database):
 	resis = {}
+	termination_line = 0
+	for i in range(len(pdb)):
+		line = PdbLine()
+		line.get_it(pdb[i])
+		if(line.record_name == 'TER'):
+			termination_line = i
+	print("Termination", termination_line)
 	for i in range(len(pdb)):
 		line = PdbLine()
 		line.get_it(pdb[i])
@@ -101,9 +115,12 @@ def get_nonstandard_resis(pdb, database):
 				resis[line.resi_name] = ResiLocation()
 				resis[line.resi_name].chain = line.chain
 				resis[line.resi_name].resi_id = line.resi_id
+				if(i < termination_line):
+					resis[line.resi_name].is_bounded = True
 				resis[line.resi_name].record_lines = []
-				resis[line.resi_name].record_lines.append(i)
-			elif((line.resi_name in resis) == True):
+				if(resis[line.resi_name].is_bounded == False or (resis[line.resi_name].is_bounded == True and line.atom_name != 'N' and line.atom_name != 'C' and line.atom_name != 'O')):
+					resis[line.resi_name].record_lines.append(i)
+			elif((line.resi_name in resis) == True and (resis[line.resi_name].is_bounded == False or (resis[line.resi_name].is_bounded == True and line.atom_name != 'N' and line.atom_name != 'C' and line.atom_name != 'O'))):
 				if(resis[line.resi_name].chain == line.chain and resis[line.resi_name].resi_id == line.resi_id):
 					resis[line.resi_name].record_lines.append(i)
 	return resis
@@ -143,10 +160,37 @@ def make_resi_topology(resis):
 	for i in resis:
 		#otwieranie skryptu dodającego wodory
 		subprocess.run(["babel", "-ipdb", i+"_no_H.pdb", "-opdb", i+".pdb", "-p"], cwd='./'+i)
+		if(resis[i].is_bounded == True):
+			c_alpha_id = 0
+			h_alpha_ids = []
+			file_h = open("./"+i+"/"+i+".pdb", "r+")
+			pdb = file_h.read().split("\n")
+			for j in range(len(pdb)):
+				line = PdbLine()
+				line.get_it(pdb[j])
+				if(line.atom_name == 'CA'):
+					c_alpha_id = line.atom_id
+			for j in range(len(pdb)):
+				line = PdbLine()
+				line.get_it(pdb[j])
+				if(line.record_name == 'CONECT' and len(line.connected_atoms) == 2 and (c_alpha_id in line.connected_atoms) == True):
+					for k in line.connected_atoms:
+						if(k != c_alpha_id):
+							h_alpha_ids.append(k)
+			file_h.truncate(0)
+			file_h.seek(0)
+			for j in range(len(pdb)):
+				line = PdbLine()
+				line.get_it(pdb[j])
+				if(line.atom_id != h_alpha_ids[0] and line.atom_id != h_alpha_ids[2] and line.record_name != 'CONECT'):
+					file_h.write(pdb[j] + '\n')
+			file_h.close()
 		#odczytanie ładunku uwodornionej reszty chemicznej
 		charge = get_charge_from_pdb('./'+i+'/'+i+'.pdb')
 		#otwieranie skryptu generującego topologię
-		subprocess.run(["acpype", "-i", i+".pdb", "-n", str(charge)], cwd='./'+i)
+		subprocess.run(["acpype", "-i", i+".pdb", "-a", "amber", "-l", "-n", str(charge)], cwd='./'+i)
+		subprocess.run(["cp", "./"+i+".acpype/"+i+"_GMX.itp", "./"], cwd='./'+i)
+			
 
 
 #START PROGRAMU
@@ -191,7 +235,7 @@ nonstandard_resis = get_nonstandard_resis(source_pdb, gmx_database)
 
 #wyświetlanie niestandardowych reszt cheemicznych
 for i in nonstandard_resis:
-	print(i, nonstandard_resis[i].chain, nonstandard_resis[i].resi_id, nonstandard_resis[i].record_lines, '\n')
+	print(i, nonstandard_resis[i].chain, nonstandard_resis[i].resi_id, "bounded:", nonstandard_resis[i].is_bounded, nonstandard_resis[i].record_lines, '\n')
 
 #wczytywanie niestandardowych reszt chemicznych z pliku PDB i zapisywanie ich do osobnych plików PDB
 split_pdb_by_resi(source_pdb, nonstandard_resis)
