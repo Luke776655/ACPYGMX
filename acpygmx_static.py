@@ -67,7 +67,7 @@ class PdbLine:
 	connected_atoms = []
 	#funkcja przypisująca wartości zmiennym
 	def get_it(self, line):
-		if(len(line)>=60):
+		if(len(line)>=70):
 			self.record_name = line[0:6].strip()
 		if(self.record_name == 'ATOM' or self.record_name == 'HETATM'):
 			self.is_record_atomic = True
@@ -76,7 +76,7 @@ class PdbLine:
 			self.resi_name = line[17:20].strip()
 			self.chain = line[21]
 			self.resi_id = int(line[22:26])
-			if(len(line)>78 and line[78].isdigit() == True):
+			if(line[78].isdigit() == True):
 				if(line[79] == '+'):
 					self.charge = int(line[78])
 				elif(line[79] == '-'):
@@ -118,8 +118,10 @@ def get_nonstandard_resis(pdb, database):
 				if(i < termination_line):
 					resis[line.resi_name].is_bounded = True
 				resis[line.resi_name].record_lines = []
-				resis[line.resi_name].record_lines.append(i)
-			elif((line.resi_name in resis) == True and resis[line.resi_name].chain == line.chain and resis[line.resi_name].resi_id == line.resi_id):
+				if(resis[line.resi_name].is_bounded == False or (resis[line.resi_name].is_bounded == True and line.atom_name != 'N' and line.atom_name != 'C' and line.atom_name != 'O')):
+					resis[line.resi_name].record_lines.append(i)
+			elif((line.resi_name in resis) == True and (resis[line.resi_name].is_bounded == False or (resis[line.resi_name].is_bounded == True and line.atom_name != 'N' and line.atom_name != 'C' and line.atom_name != 'O'))):
+				if(resis[line.resi_name].chain == line.chain and resis[line.resi_name].resi_id == line.resi_id):
 					resis[line.resi_name].record_lines.append(i)
 	return resis
 
@@ -159,121 +161,35 @@ def make_resi_topology(resis):
 		#otwieranie skryptu dodającego wodory
 		subprocess.run(["babel", "-ipdb", i+"_no_H.pdb", "-opdb", i+".pdb", "-p"], cwd='./'+i)
 		if(resis[i].is_bounded == True):
-			c_peptide_id = 0
-			hc_peptide_id = 0
-			n_peptide_id = 0
-			hn_peptide_ids = []
-			h_to_remove_ids = []
+			c_alpha_id = 0
+			h_alpha_ids = []
 			file_h = open("./"+i+"/"+i+".pdb", "r+")
 			pdb = file_h.read().split("\n")
 			for j in range(len(pdb)):
 				line = PdbLine()
 				line.get_it(pdb[j])
-				if(line.atom_name == 'C'):
-					c_peptide_id = line.atom_id
-					pdb[j] = pdb[j][0:78] + "  "
-				if(line.atom_name == 'N'):
-					n_peptide_id = line.atom_id
-					pdb[j] = pdb[j][0:78] + "  "
+				if(line.atom_name == 'CA'):
+					c_alpha_id = line.atom_id
 			for j in range(len(pdb)):
 				line = PdbLine()
 				line.get_it(pdb[j])
-				if(line.record_name == 'CONECT' and len(line.connected_atoms) == 2):
-					if((c_peptide_id in line.connected_atoms) == True):
-						for k in line.connected_atoms:
-							if(k != c_peptide_id):
-								hc_peptide_id = k
-					if((n_peptide_id in line.connected_atoms) == True):
-						for k in line.connected_atoms:
-							if(k != n_peptide_id):
-								hn_peptide_ids.append(k)
-			hn_peptide_ids.pop()
-			h_to_remove_ids = hn_peptide_ids
-			h_to_remove_ids.append(hc_peptide_id)
+				if(line.record_name == 'CONECT' and len(line.connected_atoms) == 2 and (c_alpha_id in line.connected_atoms) == True):
+					for k in line.connected_atoms:
+						if(k != c_alpha_id):
+							h_alpha_ids.append(k)
 			file_h.truncate(0)
 			file_h.seek(0)
 			for j in range(len(pdb)):
 				line = PdbLine()
 				line.get_it(pdb[j])
-				if(((line.atom_id in h_to_remove_ids) == False or line.atom_name[0] != 'H') and line.record_name != 'CONECT'):
+				if(line.atom_id != h_alpha_ids[0] and line.atom_id != h_alpha_ids[2] and line.record_name != 'CONECT'):
 					file_h.write(pdb[j] + '\n')
 			file_h.close()
 		#odczytanie ładunku uwodornionej reszty chemicznej
 		charge = get_charge_from_pdb('./'+i+'/'+i+'.pdb')
 		#otwieranie skryptu generującego topologię
-		subprocess.run(["acpype", "-i", i+".pdb", "-l", "-n", str(charge)], cwd='./'+i)
+		subprocess.run(["acpype", "-i", i+".pdb", "-a", "amber", "-l", "-n", str(charge)], cwd='./'+i)
 		subprocess.run(["cp", "./"+i+".acpype/"+i+"_GMX.itp", "./"], cwd='./'+i)
-
-class ItpLine:
-	def __init__(self):
-		self.ItpLine = []
-	atom_nr = 0
-	atom_type = ''
-	resi = 0
-	res = ''
-	atom_name = ''
-	cgnr = 0
-	charge = 0
-	mass = 0
-	def get_atom_line(self, line):
-		line = line.split()
-		self.atom_nr = int(line[0])
-		self.atom_type = line[1]
-		self.resi = int(line[2])
-		self.res = line[3]
-		self.atom_name = line[4]
-		self.cgnr = int(line[5])
-		self.charge = float(line[6])
-		self.mass = float(line[7])
-	'''
-	def get_bound_line(self, line):
-		line = line.split()
-		self.ai = int(line[0])
-		self.aj = int(line[1])
-		self.funct = int(line[2])
-		self.r = float(line[6])
-		self.mass = float(line[7])'''
-
-def make_rtp(resis):
-	for i in resis:
-		print(i)
-		try:
-			itp = open('./'+i+'/'+i+'_GMX.itp', "r").read().split("\n")
-		except:
-			print("\nERROR: Cannot create a file\n")
-			print_help()
-		
-		atoms_record_begin = 0
-		bonds_record_begin = 0
-		bonds_record_end = 0
-
-		for k in range(len(itp)):
-			line = itp[k].split()
-			if(len(line) >= 3 and line[0] == "[" and line[1] == "atoms"):
-				atoms_record_begin = k
-			if(len(line) >= 3 and line[0] == "[" and line[1] == "bonds"):
-				bonds_record_begin = k
-			if(len(line) >= 3 and line[0] == "[" and line[1] == "pairs"):
-				bonds_record_end = k
-		try:
-			rtp = open(amberff_path+'/'+i+'.rtp', "w+")
-		except:
-			print("\nERROR: Cannot create a file\n")
-			print_help()
-		rtp.write("[ bondedtypes ]" + '\n')
-		rtp.write("; bonds  angles  dihedrals  impropers all_dihedrals nrexcl HH14 RemoveDih" + '\n')
-		rtp.write("     1       1          9          4        1         3      1     0" + '\n\n')
-		rtp.write("[ "+i+" ]" + '\n')
-		rtp.write(" [ atoms ]" + '\n')
-		j = 1
-		for k in range(atoms_record_begin, bonds_record_begin):
-			line = itp[k].split()
-			if(len(line) > 10 and line[0] != ';'):
-				line = ItpLine()
-				line.get_atom_line(itp[k])
-				rtp.write("\t"+line.atom_name+"\t"+line.atom_type+"\t"+'{0:.6f}'.format(line.charge)+"\t"+str(j)+"\n")
-				j +=1
-		rtp.close()
 			
 
 
@@ -326,5 +242,3 @@ split_pdb_by_resi(source_pdb, nonstandard_resis)
 
 #tworzenie topologii dla niestandardowych reszt chemicznych
 make_resi_topology(nonstandard_resis)
-
-make_rtp(nonstandard_resis)
