@@ -91,11 +91,9 @@ class PdbLine:
 #klasa ze strukturą lokalizacji wybranej reszty chemicznej
 class ResiLocation:
 	def __init__(self):
-		self.ResiLocation = []
-	chain = ''
-	resi_id = 0
-	record_lines = []
-	is_bounded = False
+		self.ResiLocation = {}
+	location = {}
+	bounded = False
 
 #funkcja wyszukująca niestandardowe reszty chemiczne w pliku PDB, zwraca je i ich pozycje jako słownik
 def get_nonstandard_resis(pdb, database):
@@ -111,32 +109,119 @@ def get_nonstandard_resis(pdb, database):
 		line = PdbLine()
 		line.get_it(pdb[i])
 		if(line.is_record_atomic == True):
-			if((line.resi_name in database) == False and (line.resi_name in resis) == False):
-				resis[line.resi_name] = ResiLocation()
-				resis[line.resi_name].chain = line.chain
-				resis[line.resi_name].resi_id = line.resi_id
+			if((line.resi_name in database) == False):
+				if((line.resi_name in resis) == False):
+					resis[line.resi_name] = ResiLocation()
+					resis[line.resi_name].location = {}
+				if((line.chain in resis[line.resi_name].location) == False):
+					resis[line.resi_name].location[line.chain] = {}
+				if((line.resi_id in resis[line.resi_name].location[line.chain]) == False):
+					resis[line.resi_name].location[line.chain][line.resi_id] = []
+				resis[line.resi_name].location[line.chain][line.resi_id].append(i)
 				if(i < termination_line):
-					resis[line.resi_name].is_bounded = True
-				resis[line.resi_name].record_lines = []
-				resis[line.resi_name].record_lines.append(i)
-			elif((line.resi_name in resis) == True and resis[line.resi_name].chain == line.chain and resis[line.resi_name].resi_id == line.resi_id):
-					resis[line.resi_name].record_lines.append(i)
+					resis[line.resi_name].bounded = True
 	return resis
 
+index = 0
 #funkcja wczytująca wybrane reszty chemiczne z pliku PDB i zapisująca je do osobnych plików PDB
 def split_pdb_by_resi(pdb, resis):
 	for i in resis:
 		subprocess.run(["mkdir", i])
-		try:
-			resi_pdb = open('./'+i+'/'+i+'_no_H.pdb', "w+")
-		except:
-			print("\nERROR: Cannot create a file\n")
-			print_help()
-		resi_pdb.write("HEADER " + i + '\n')
-		for j in range(len(resis[i].record_lines)):
-			resi_pdb.write(source_pdb[resis[i].record_lines[j]] + '\n')
-		resi_pdb.write("END")
-		resi_pdb.close()
+
+		for j in resis[i].location:
+			subprocess.run(["mkdir", j], cwd='./'+i)
+
+			for k in resis[i].location[j]:
+				print(k)
+				try:
+					resi_pdb = open('./'+i+'/'+j+'/'+str(k)+'_no_H.pdb', "w+")
+				except:
+					print("\nERROR: Cannot create a file\n")
+					print_help()
+				resi_pdb.write("HEADER "+i+'/'+j+'/'+str(k)+'\n')
+				for l in range(len(resis[i].location[j][k])):
+					m = 0
+					
+					while(m<len(pdb)):
+						line = PdbLine()
+						line.get_it(pdb[m])
+						if(i == line.resi_name and j == line.chain and k == line.resi_id):
+							#print("INDEX:", index)
+							global index
+							index = m
+							#print(m)
+							resi_pdb.write(pdb[m] + '\n')
+							del(pdb[m])
+							m-=1
+						m+=1
+				print("INDEX:", index)
+				resi_pdb.write("END")
+				resi_pdb.close()
+				add_hydrogens(str(k), "./"+i+"/"+j+"/", resis[i].bounded)
+				hydrogened = open("./"+i+"/"+j+"/"+str(k)+".pdb", "r").read().split("\n")
+				h_counter = 0
+				for n in hydrogened:
+					line = PdbLine()
+					line.get_it(n)
+					if(line.is_record_atomic == True):
+						if(line.atom_name == 'H'):
+							if(h_counter > 0):
+								h_name = 'H'+str(h_counter)
+								h_name = h_name + '   '
+								n = n[0:13]+h_name[0:4]+n[17:]
+								print(n)
+							h_counter +=1
+						pdb.insert(index, n)
+						index+=1
+	return pdb
+						
+
+
+
+#funkcja tworząca topologię dla wybranych reszt chemicznych
+def add_hydrogens(name, path, is_bounded):
+	#otwieranie skryptu dodającego wodory
+	subprocess.run(["babel", "-ipdb", name+"_no_H.pdb", "-opdb", name+".pdb", "-p"], cwd=path)
+	if(is_bounded == True):
+		c_peptide_id = 0
+		hc_peptide_id = 0
+		n_peptide_id = 0
+		hn_peptide_ids = []
+		h_to_remove_ids = []
+		file_h = open(path+"/"+name+".pdb", "r+")
+		pdb = file_h.read().split("\n")
+		for j in range(len(pdb)):
+			line = PdbLine()
+			line.get_it(pdb[j])
+			if(line.atom_name == 'C'):
+				c_peptide_id = line.atom_id
+				pdb[j] = pdb[j][0:78] + "  "
+			if(line.atom_name == 'N'):
+				n_peptide_id = line.atom_id
+				pdb[j] = pdb[j][0:78] + "  "
+		for j in range(len(pdb)):
+			line = PdbLine()
+			line.get_it(pdb[j])
+			if(line.record_name == 'CONECT' and len(line.connected_atoms) == 2):
+				if((c_peptide_id in line.connected_atoms) == True):
+					for k in line.connected_atoms:
+						if(k != c_peptide_id):
+							hc_peptide_id = k
+				if((n_peptide_id in line.connected_atoms) == True):
+					for k in line.connected_atoms:
+						if(k != n_peptide_id):
+							hn_peptide_ids.append(k)
+		hn_peptide_ids.pop()
+		h_to_remove_ids = hn_peptide_ids
+		h_to_remove_ids.append(hc_peptide_id)
+		file_h.truncate(0)
+		file_h.seek(0)
+		for j in range(len(pdb)):
+			line = PdbLine()
+			line.get_it(pdb[j])
+			if(((line.atom_id in h_to_remove_ids) == False or line.atom_name[0] != 'H') and line.record_name != 'CONECT'):
+				file_h.write(pdb[j] + '\n')
+		file_h.close()
 
 #funkcja odczytująca ładunek związku z pliku PDB
 def get_charge_from_pdb(pdb_path):
@@ -153,56 +238,17 @@ def get_charge_from_pdb(pdb_path):
 		charge += line.charge
 	return charge
 
-#funkcja tworząca topologię dla wybranych reszt chemicznych
 def make_resi_topology(resis):
 	for i in resis:
-		#otwieranie skryptu dodającego wodory
-		subprocess.run(["babel", "-ipdb", i+"_no_H.pdb", "-opdb", i+".pdb", "-p"], cwd='./'+i)
-		if(resis[i].is_bounded == True):
-			c_peptide_id = 0
-			hc_peptide_id = 0
-			n_peptide_id = 0
-			hn_peptide_ids = []
-			h_to_remove_ids = []
-			file_h = open("./"+i+"/"+i+".pdb", "r+")
-			pdb = file_h.read().split("\n")
-			for j in range(len(pdb)):
-				line = PdbLine()
-				line.get_it(pdb[j])
-				if(line.atom_name == 'C'):
-					c_peptide_id = line.atom_id
-					pdb[j] = pdb[j][0:78] + "  "
-				if(line.atom_name == 'N'):
-					n_peptide_id = line.atom_id
-					pdb[j] = pdb[j][0:78] + "  "
-			for j in range(len(pdb)):
-				line = PdbLine()
-				line.get_it(pdb[j])
-				if(line.record_name == 'CONECT' and len(line.connected_atoms) == 2):
-					if((c_peptide_id in line.connected_atoms) == True):
-						for k in line.connected_atoms:
-							if(k != c_peptide_id):
-								hc_peptide_id = k
-					if((n_peptide_id in line.connected_atoms) == True):
-						for k in line.connected_atoms:
-							if(k != n_peptide_id):
-								hn_peptide_ids.append(k)
-			hn_peptide_ids.pop()
-			h_to_remove_ids = hn_peptide_ids
-			h_to_remove_ids.append(hc_peptide_id)
-			file_h.truncate(0)
-			file_h.seek(0)
-			for j in range(len(pdb)):
-				line = PdbLine()
-				line.get_it(pdb[j])
-				if(((line.atom_id in h_to_remove_ids) == False or line.atom_name[0] != 'H') and line.record_name != 'CONECT'):
-					file_h.write(pdb[j] + '\n')
-			file_h.close()
+		path = i+'/'+list(resis[i].location.keys())[0]+'/'
+		source_file = str(list(resis[i].location[list(resis[i].location.keys())[0]].keys())[0])+'.pdb'
+		subprocess.run(["cp", source_file, i+'.pdb'], cwd=path)
+		print(path)
 		#odczytanie ładunku uwodornionej reszty chemicznej
-		charge = get_charge_from_pdb('./'+i+'/'+i+'.pdb')
+		charge = get_charge_from_pdb(path+i+'.pdb')
 		#otwieranie skryptu generującego topologię
-		subprocess.run(["acpype", "-i", i+".pdb", "-l", "-n", str(charge)], cwd='./'+i)
-		subprocess.run(["cp", "./"+i+".acpype/"+i+"_GMX.itp", "./"], cwd='./'+i)
+		subprocess.run(["acpype", "-i", i+'.pdb', "-n", str(charge)], cwd=path)
+		subprocess.run(["cp", "./"+i+".acpype/"+i+"_GMX.itp", "../"], cwd=path)
 
 class ItpLine:
 	def __init__(self):
@@ -319,12 +365,20 @@ nonstandard_resis = get_nonstandard_resis(source_pdb, gmx_database)
 
 #wyświetlanie niestandardowych reszt cheemicznych
 for i in nonstandard_resis:
-	print(i, nonstandard_resis[i].chain, nonstandard_resis[i].resi_id, "bounded:", nonstandard_resis[i].is_bounded, nonstandard_resis[i].record_lines, '\n')
+	print(i, nonstandard_resis[i].location, '\n')
 
 #wczytywanie niestandardowych reszt chemicznych z pliku PDB i zapisywanie ich do osobnych plików PDB
-split_pdb_by_resi(source_pdb, nonstandard_resis)
+new_pdb = split_pdb_by_resi(source_pdb, nonstandard_resis)
+
+file_h = open("./complex.pdb", "w+")
+for i in new_pdb:
+	file_h.write(i + '\n')
+file_h.close()
+
 
 #tworzenie topologii dla niestandardowych reszt chemicznych
 make_resi_topology(nonstandard_resis)
 
 make_rtp(nonstandard_resis)
+
+subprocess.run(["gmx", "pdb2gmx", "-f", "complex.pdb", "-o", "complex.gro", "-p", topology_name])

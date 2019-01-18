@@ -1,0 +1,29 @@
+[ bondedtypes ]
+; bonds  angles  dihedrals  impropers all_dihedrals nrexcl HH14 RemoveDih
+     1       1          9          4        1         3      1     0
+
+[ GAM ]
+ [ atoms ]
+	CB2	c3	-0.148100	1
+	CB1	c3	-0.105400	2
+	CG	c3	-0.195400	3
+	CD	c	0.629101	4
+	OE1	oh	-0.536101	5
+	OE2	o	-0.468000	6
+	C	c	0.612101	7
+	O	oh	-0.508101	8
+	OXT	o	-0.451000	9
+	CA	c3	0.049200	10
+	N	n4	-0.841602	11
+	H	hc	0.091700	12
+	H1	hc	0.091700	13
+	H2	hc	0.091700	14
+	H3	hc	0.102200	15
+	H4	hc	0.102200	16
+	H5	hc	0.086200	17
+	H6	hc	0.086200	18
+	H7	ho	0.437000	19
+	H8	ho	0.450000	20
+	H9	hn	0.474800	21
+	H10	hn	0.474800	22
+	H11	hn	0.474800	23
