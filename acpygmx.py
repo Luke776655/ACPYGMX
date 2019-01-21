@@ -1,11 +1,31 @@
 #!/usr/bin/python3.5
 
-#importowanie modułów
 import sys
 import subprocess
 
-#funkcja wyświetlająca pomoc
+'''
+	ACPYGMX
+
+	Requirements:
+		Python 3.5 or higher
+		Gromacs 5.0 or higher
+		OpenBabel
+		AmberTools
+		Acpype
+                 
+	It was inspired by Acpype
+
+	This code is released under GNU General Public License V3.
+
+	<<<  NO WARRANTY AT ALL!!!  >>>
+
+	Łukasz Radziński
+
+    	s174023@student.pg.edu.pl
+'''
+
 def print_help():
+	'''Wświetlanie pomocy'''
 	print("ACPYGMX v. 0.0\n")
 	print("Program usage:\n")
 	print("acpygmx.py -f _inputname.pdb_ [-o _topologyname.top_]")
@@ -14,8 +34,10 @@ def print_help():
 	print("Options:\n\t-f _inputname.pdb_\tname of input PDB file\n\t-o _topologyname.top_\tname of output topology file\n\t-h\t\t\thelp")
 	sys.exit()
 
-#funkcja pobierająca bazę danych reszt chemicznych z GROMACS
 def get_gmx_resi_database(path_to_ff):
+	'''Wczytywanie bazy danych reszt chemicznych.
+	Argumenty: ścieżka do katalogu z polem siłowym.
+	Zwraca listę z resztami chemicznymi z bazy danych.'''
 	resi_database = []
 	try:
 		aa_resi = open(path_to_ff + "//aminoacids.rtp", "r").read().split("\n")
@@ -52,8 +74,8 @@ def get_gmx_resi_database(path_to_ff):
 				resi_database.append(line[1])
 	return resi_database
 
-#klasa ze strukturą wiersza PDB
 class PdbLine:
+	'''Struktura wiersza PDB'''
 	def __init__(self):
 		self.PdbLine = []
 	is_record_atomic = False
@@ -65,8 +87,9 @@ class PdbLine:
 	resi_id = 0
 	charge = 0
 	connected_atoms = []
-	#funkcja przypisująca wartości zmiennym
 	def get_it(self, line):
+		'''Wczytywanie wartości z wiersza PDB i przypisywanie ich zmiennym ze struktury.
+		Argumenty: wiersz PDB'''
 		if(len(line)>=60):
 			self.record_name = line[0:6].strip()
 		if(self.record_name == 'ATOM' or self.record_name == 'HETATM'):
@@ -86,17 +109,18 @@ class PdbLine:
 			self.connected_atoms = []
 			for i in line:
 				self.connected_atoms.append(int(i))
-			
-
-#klasa ze strukturą lokalizacji wybranej reszty chemicznej
+		
 class ResiLocation:
+	'''Struktura lokalizacji danej reszty chemicznej w PDB'''
 	def __init__(self):
 		self.ResiLocation = {}
 	location = {}
 	bounded = False
 
-#funkcja wyszukująca niestandardowe reszty chemiczne w pliku PDB, zwraca je i ich pozycje jako słownik
 def get_nonstandard_resis(pdb, database):
+	'''Wyszukiwanie niestandardowych reszt chemicznych w pliku PDB.
+	Argumenty: tekst pliku PDB podzielony na wiersze, lista reszt chemicznych z bazy danych.
+	Zwraca słownik z niestandardowymi resztami chemicznymi i ich pozycjami'''
 	resis = {}
 	termination_line = 0
 	for i in range(len(pdb)):
@@ -123,8 +147,10 @@ def get_nonstandard_resis(pdb, database):
 	return resis
 
 index = 0
-#funkcja wczytująca wybrane reszty chemiczne z pliku PDB i zapisująca je do osobnych plików PDB
 def split_pdb_by_resi(pdb, resis):
+	'''Wczytywanie wybranych reszt chemicznych z pliku PDB, zapisywanie ich do osobnych plików PDB, dodanie atomów wodoru do każdej.
+	Argumenty: tekst pliku PDB podzielony na wiersze, słownik z resztami chemicznymi i ich pozycjami.
+	Zwraca zmodyfikowany wejściowy plik PDB, do niestandardowych reszt chemicznych zostały dodane atomy wodoru.'''
 	for i in resis:
 		subprocess.run(["mkdir", i])
 
@@ -132,7 +158,6 @@ def split_pdb_by_resi(pdb, resis):
 			subprocess.run(["mkdir", j], cwd='./'+i)
 
 			for k in resis[i].location[j]:
-				print(k)
 				try:
 					resi_pdb = open('./'+i+'/'+j+'/'+str(k)+'_no_H.pdb', "w+")
 				except:
@@ -154,7 +179,6 @@ def split_pdb_by_resi(pdb, resis):
 							del(pdb[m])
 							m-=1
 						m+=1
-				print("INDEX:", index)
 				resi_pdb.write("END")
 				resi_pdb.close()
 				add_hydrogens(str(k), "./"+i+"/"+j+"/", resis[i].bounded)
@@ -169,18 +193,14 @@ def split_pdb_by_resi(pdb, resis):
 								h_name = 'H'+str(h_counter)
 								h_name = h_name + '   '
 								n = n[0:13]+h_name[0:4]+n[17:]
-								print(n)
 							h_counter +=1
 						pdb.insert(index, n)
 						index+=1
 	return pdb
 						
-
-
-
-#funkcja tworząca topologię dla wybranych reszt chemicznych
 def add_hydrogens(name, path, is_bounded):
-	#otwieranie skryptu dodającego wodory
+	'''Dodawanie wodoru do reszty chemicznej. Korzystanie z programu zewnętrznego "babel"
+	Argumenty: nazwa reszty chemicznej, ścieżka do pliku PDB z resztą chemiczną, informacja o tym czy reszta jest w stanie związanym.'''
 	subprocess.run(["babel", "-ipdb", name+"_no_H.pdb", "-opdb", name+".pdb", "-p"], cwd=path)
 	if(is_bounded == True):
 		c_peptide_id = 0
@@ -223,8 +243,10 @@ def add_hydrogens(name, path, is_bounded):
 				file_h.write(pdb[j] + '\n')
 		file_h.close()
 
-#funkcja odczytująca ładunek związku z pliku PDB
 def get_charge_from_pdb(pdb_path):
+	'''Odczytywanie ładunku związku w pliku PDB.
+	Argumenty: ścieżka do pliku PDB.
+	Zwraca wartość ładunku.'''
 	charge = 0
 	try:
 		molecule = open(pdb_path, "r").read().split("\n")
@@ -239,11 +261,12 @@ def get_charge_from_pdb(pdb_path):
 	return charge
 
 def make_resi_topology(resis):
+	'''Tworzenie topologii cząstkowych reszt chemicznych w postaci plików *.itp. Korzystanie z programu zewnętrznego "acpype".
+	Argumenty: słownik z resztami chemicznymi i ich pozycjami.'''
 	for i in resis:
 		path = i+'/'+list(resis[i].location.keys())[0]+'/'
 		source_file = str(list(resis[i].location[list(resis[i].location.keys())[0]].keys())[0])+'.pdb'
 		subprocess.run(["cp", source_file, i+'.pdb'], cwd=path)
-		print(path)
 		#odczytanie ładunku uwodornionej reszty chemicznej
 		charge = get_charge_from_pdb(path+i+'.pdb')
 		#otwieranie skryptu generującego topologię
@@ -251,6 +274,7 @@ def make_resi_topology(resis):
 		subprocess.run(["cp", "./"+i+".acpype/"+i+"_GMX.itp", "../"], cwd=path)
 
 class ItpLine:
+	'''Struktura wiersza pliku ITP'''
 	def __init__(self):
 		self.ItpLine = []
 	atom_nr = 0
@@ -262,6 +286,8 @@ class ItpLine:
 	charge = 0
 	mass = 0
 	def get_atom_line(self, line):
+		'''Wczytywanie wartości z wiersza pliku *.itp i przypisywanie ich zmiennym ze struktury.
+		Argumenty: wiersz pliku *.itp'''
 		line = line.split()
 		self.atom_nr = int(line[0])
 		self.atom_type = line[1]
@@ -281,6 +307,8 @@ class ItpLine:
 		self.mass = float(line[7])'''
 
 def make_rtp(resis):
+	'''Konwertowanie pliku *.itp do *.rtp. Plik *.rtp jest zapisywany w katalogu pola siłowego.
+	Argumenty: słownik z resztami chemicznymi i ich pozycjami.'''
 	for i in resis:
 		print(i)
 		try:
@@ -367,11 +395,12 @@ nonstandard_resis = get_nonstandard_resis(source_pdb, gmx_database)
 for i in nonstandard_resis:
 	print(i, nonstandard_resis[i].location, '\n')
 
-#wczytywanie niestandardowych reszt chemicznych z pliku PDB i zapisywanie ich do osobnych plików PDB
-new_pdb = split_pdb_by_resi(source_pdb, nonstandard_resis)
+#wczytywanie niestandardowych reszt chemicznych z pliku PDB, zapisywanie ich do osobnych plików PDB, uzyskanie układu z uwodornionymi resztami niestandardowymi
+complex_pdb = split_pdb_by_resi(source_pdb, nonstandard_resis)
 
+#zapisywanie complex_pdb do pliku complex.pdb
 file_h = open("./complex.pdb", "w+")
-for i in new_pdb:
+for i in complex_pdb:
 	file_h.write(i + '\n')
 file_h.close()
 
@@ -379,6 +408,10 @@ file_h.close()
 #tworzenie topologii dla niestandardowych reszt chemicznych
 make_resi_topology(nonstandard_resis)
 
+#dodawanie plików *.rtp z topologiami związków niestandardowych do katalogu pola siłowego
 make_rtp(nonstandard_resis)
 
+#tworzenie topologii ogólnej, używanie programu zewnętrznego "gmx pdb2gmx"
 subprocess.run(["gmx", "pdb2gmx", "-f", "complex.pdb", "-o", "complex.gro", "-p", topology_name])
+
+print("\nTopology is written to " + topology_name)
